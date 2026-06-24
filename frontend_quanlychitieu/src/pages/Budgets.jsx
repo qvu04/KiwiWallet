@@ -4,14 +4,19 @@ import { motion } from 'framer-motion';
 import { FaPlus, FaTrash, FaEdit } from 'react-icons/fa';
 import api from '../api/client.js';
 import Modal from '../components/Modal.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import { useToast } from '../context/ToastContext.jsx';
 import { formatVND } from '../utils/format.js';
 
 export default function Budgets() {
+  const { addToast } = useToast();
   const [budgets, setBudgets] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const { register, handleSubmit, reset, formState: { errors } } = useForm();
 
   async function load() {
@@ -35,15 +40,32 @@ export default function Budgets() {
 
   async function onSubmit(data) {
     const payload = { ...data, amount_limit: Number(data.amount_limit) };
-    if (editing) await api.put(`/budgets/${editing.id}`, payload);
-    else await api.post('/budgets', payload);
-    setOpen(false);
-    load();
+    try {
+      if (editing) {
+        await api.put(`/budgets/${editing.id}`, payload);
+        addToast('Cập nhật ngân sách thành công');
+      } else {
+        await api.post('/budgets', payload);
+        addToast('Thêm ngân sách thành công');
+      }
+      setOpen(false);
+      load();
+    } catch {
+      addToast('Có lỗi xảy ra, vui lòng thử lại', 'error');
+    }
   }
-  async function remove(id) {
-    if (!confirm('Xóa ngân sách này?')) return;
-    await api.delete(`/budgets/${id}`);
-    load();
+  function askRemove(id) {
+    setPendingDeleteId(id);
+    setConfirmOpen(true);
+  }
+  async function remove() {
+    try {
+      await api.delete(`/budgets/${pendingDeleteId}`);
+      addToast('Đã xóa ngân sách');
+      load();
+    } catch {
+      addToast('Xóa thất bại, vui lòng thử lại', 'error');
+    }
   }
 
   function barColor(p) {
@@ -80,7 +102,7 @@ export default function Budgets() {
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => openEdit(b)} className="p-2 text-slate-400 hover:text-brand-500"><FaEdit /></button>
-                  <button onClick={() => remove(b.id)} className="p-2 text-slate-400 hover:text-red-500"><FaTrash /></button>
+                  <button onClick={() => askRemove(b.id)} className="p-2 text-slate-400 hover:text-red-500"><FaTrash /></button>
                 </div>
               </div>
               <div className="mb-1 flex justify-between text-sm">
@@ -100,6 +122,14 @@ export default function Budgets() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={remove}
+        title="Xóa ngân sách?"
+        message="Hành động này không thể hoàn tác."
+      />
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Sửa ngân sách' : 'Thêm ngân sách'}>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

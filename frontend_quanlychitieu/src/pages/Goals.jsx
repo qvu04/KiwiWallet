@@ -4,13 +4,18 @@ import { motion } from 'framer-motion';
 import { FaPlus, FaTrash, FaEdit, FaBullseye } from 'react-icons/fa';
 import api from '../api/client.js';
 import Modal from '../components/Modal.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import { useToast } from '../context/ToastContext.jsx';
 import { formatVND, formatDate } from '../utils/format.js';
 
 export default function Goals() {
+  const { addToast } = useToast();
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const { register, handleSubmit, reset, formState: { errors } } = useForm();
 
   async function load() {
@@ -38,15 +43,32 @@ export default function Goals() {
       saved_amount: Number(data.saved_amount || 0),
       deadline: data.deadline || null,
     };
-    if (editing) await api.put(`/goals/${editing.id}`, payload);
-    else await api.post('/goals', payload);
-    setOpen(false);
-    load();
+    try {
+      if (editing) {
+        await api.put(`/goals/${editing.id}`, payload);
+        addToast('Cập nhật mục tiêu thành công');
+      } else {
+        await api.post('/goals', payload);
+        addToast('Thêm mục tiêu thành công');
+      }
+      setOpen(false);
+      load();
+    } catch {
+      addToast('Có lỗi xảy ra, vui lòng thử lại', 'error');
+    }
   }
-  async function remove(id) {
-    if (!confirm('Xóa mục tiêu này?')) return;
-    await api.delete(`/goals/${id}`);
-    load();
+  function askRemove(id) {
+    setPendingDeleteId(id);
+    setConfirmOpen(true);
+  }
+  async function remove() {
+    try {
+      await api.delete(`/goals/${pendingDeleteId}`);
+      addToast('Đã xóa mục tiêu');
+      load();
+    } catch {
+      addToast('Xóa thất bại, vui lòng thử lại', 'error');
+    }
   }
 
   return (
@@ -80,7 +102,7 @@ export default function Goals() {
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => openEdit(g)} className="p-2 text-slate-400 hover:text-brand-500"><FaEdit /></button>
-                  <button onClick={() => remove(g.id)} className="p-2 text-slate-400 hover:text-red-500"><FaTrash /></button>
+                  <button onClick={() => askRemove(g.id)} className="p-2 text-slate-400 hover:text-red-500"><FaTrash /></button>
                 </div>
               </div>
               <div className="mb-1 flex justify-between text-sm">
@@ -101,6 +123,14 @@ export default function Goals() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={remove}
+        title="Xóa mục tiêu?"
+        message="Hành động này không thể hoàn tác."
+      />
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Sửa mục tiêu' : 'Thêm mục tiêu'}>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

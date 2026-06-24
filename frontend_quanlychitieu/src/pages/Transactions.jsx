@@ -4,16 +4,21 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FaPlus, FaTrash, FaEdit, FaArrowUp, FaArrowDown } from 'react-icons/fa';
 import api from '../api/client.js';
 import Modal from '../components/Modal.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import { useToast } from '../context/ToastContext.jsx';
 import { CategoryIcon } from '../utils/icons.jsx';
 import { formatVND, formatDate, todayISO } from '../utils/format.js';
 
 export default function Transactions() {
+  const { addToast } = useToast();
   const [txs, setTxs] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState(null);
 
   const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm();
   const type = watch('type', 'expense');
@@ -42,16 +47,33 @@ export default function Transactions() {
 
   async function onSubmit(data) {
     const payload = { ...data, amount: Number(data.amount) };
-    if (editing) await api.put(`/transactions/${editing.id}`, payload);
-    else await api.post('/transactions', payload);
-    setOpen(false);
-    load();
+    try {
+      if (editing) {
+        await api.put(`/transactions/${editing.id}`, payload);
+        addToast('Cập nhật giao dịch thành công');
+      } else {
+        await api.post('/transactions', payload);
+        addToast('Thêm giao dịch thành công');
+      }
+      setOpen(false);
+      load();
+    } catch {
+      addToast('Có lỗi xảy ra, vui lòng thử lại', 'error');
+    }
   }
 
-  async function remove(id) {
-    if (!confirm('Xóa giao dịch này?')) return;
-    await api.delete(`/transactions/${id}`);
-    load();
+  function askRemove(id) {
+    setPendingDeleteId(id);
+    setConfirmOpen(true);
+  }
+  async function remove() {
+    try {
+      await api.delete(`/transactions/${pendingDeleteId}`);
+      addToast('Đã xóa giao dịch');
+      load();
+    } catch {
+      addToast('Xóa thất bại, vui lòng thử lại', 'error');
+    }
   }
 
   const filtered = txs.filter((t) => filter === 'all' || t.type === filter);
@@ -98,12 +120,20 @@ export default function Transactions() {
                   {formatVND(t.amount)}
                 </span>
                 <button onClick={() => openEdit(t)} className="p-2 text-slate-400 hover:text-brand-500"><FaEdit /></button>
-                <button onClick={() => remove(t.id)} className="p-2 text-slate-400 hover:text-red-500"><FaTrash /></button>
+                <button onClick={() => askRemove(t.id)} className="p-2 text-slate-400 hover:text-red-500"><FaTrash /></button>
               </motion.div>
             ))}
           </AnimatePresence>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={remove}
+        title="Xóa giao dịch?"
+        message="Hành động này không thể hoàn tác."
+      />
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Sửa giao dịch' : 'Thêm giao dịch'}>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

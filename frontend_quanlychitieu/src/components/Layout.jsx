@@ -8,6 +8,7 @@ import {
 import { useAuth } from '../context/AuthContext.jsx';
 import DarkModeSwitch from './DarkModeSwitch.jsx';
 import Modal from './Modal.jsx';
+import ConfirmDialog from './ConfirmDialog.jsx';
 
 const NAV = [
   { to: '/', label: 'Tổng quan', icon: FaThLarge, end: true },
@@ -23,6 +24,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const [openSidebar, setOpenSidebar] = useState(false);
   const [openUser, setOpenUser] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   const initials = (user?.full_name || user?.email || '?').charAt(0).toUpperCase();
 
@@ -115,6 +117,14 @@ export default function Layout() {
         </main>
       </div>
 
+      <ConfirmDialog
+        open={confirmLogout}
+        onClose={() => setConfirmLogout(false)}
+        onConfirm={handleLogout}
+        title="Đăng xuất?"
+        message="Bạn có chắc muốn đăng xuất khỏi tài khoản không?"
+      />
+
       {/* Modal thong tin nguoi dung */}
       <Modal open={openUser} onClose={() => setOpenUser(false)} title="Thông tin tài khoản">
         <div className="flex flex-col items-center gap-3 text-center">
@@ -126,7 +136,7 @@ export default function Layout() {
             <p className="text-sm text-slate-500">{user?.email}</p>
           </div>
           <button
-            onClick={handleLogout}
+            onClick={() => setConfirmLogout(true)}
             className="mt-2 flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2 text-white hover:bg-red-600"
           >
             <FaSignOutAlt /> Đăng xuất

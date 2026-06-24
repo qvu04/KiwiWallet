@@ -4,15 +4,20 @@ import { motion } from 'framer-motion';
 import { FaPlus, FaTrash, FaEdit, FaBell, FaCheck, FaRedo } from 'react-icons/fa';
 import api from '../api/client.js';
 import Modal from '../components/Modal.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import { useToast } from '../context/ToastContext.jsx';
 import { formatVND, formatDate, todayISO } from '../utils/format.js';
 
 const REPEAT_LABEL = { none: 'Một lần', weekly: 'Hàng tuần', monthly: 'Hàng tháng' };
 
 export default function Reminders() {
+  const { addToast } = useToast();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const { register, handleSubmit, reset, formState: { errors } } = useForm();
 
   async function load() {
@@ -35,19 +40,36 @@ export default function Reminders() {
 
   async function onSubmit(data) {
     const payload = { ...data, amount: data.amount ? Number(data.amount) : null };
-    if (editing) await api.put(`/reminders/${editing.id}`, payload);
-    else await api.post('/reminders', payload);
-    setOpen(false);
-    load();
+    try {
+      if (editing) {
+        await api.put(`/reminders/${editing.id}`, payload);
+        addToast('Cập nhật nhắc nhở thành công');
+      } else {
+        await api.post('/reminders', payload);
+        addToast('Thêm nhắc nhở thành công');
+      }
+      setOpen(false);
+      load();
+    } catch {
+      addToast('Có lỗi xảy ra, vui lòng thử lại', 'error');
+    }
   }
   async function toggleDone(r) {
     await api.put(`/reminders/${r.id}`, { ...r, is_done: !r.is_done });
     load();
   }
-  async function remove(id) {
-    if (!confirm('Xóa nhắc nhở này?')) return;
-    await api.delete(`/reminders/${id}`);
-    load();
+  function askRemove(id) {
+    setPendingDeleteId(id);
+    setConfirmOpen(true);
+  }
+  async function remove() {
+    try {
+      await api.delete(`/reminders/${pendingDeleteId}`);
+      addToast('Đã xóa nhắc nhở');
+      load();
+    } catch {
+      addToast('Xóa thất bại, vui lòng thử lại', 'error');
+    }
   }
 
   return (
@@ -90,11 +112,19 @@ export default function Reminders() {
               </div>
               {r.amount && <span className="font-semibold">{formatVND(r.amount)}</span>}
               <button onClick={() => openEdit(r)} className="p-2 text-slate-400 hover:text-brand-500"><FaEdit /></button>
-              <button onClick={() => remove(r.id)} className="p-2 text-slate-400 hover:text-red-500"><FaTrash /></button>
+              <button onClick={() => askRemove(r.id)} className="p-2 text-slate-400 hover:text-red-500"><FaTrash /></button>
             </motion.div>
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={remove}
+        title="Xóa nhắc nhở?"
+        message="Hành động này không thể hoàn tác."
+      />
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Sửa nhắc nhở' : 'Thêm nhắc nhở'}>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
